@@ -216,6 +216,41 @@ class Si468x:
         self.send_command(BOOT, b'\x00')
         print("FW Booted")
 
+    def boot_fm(self, host = True):
+        self.reset()
+        self.power_up()
+        self.load_init()
+        if host:
+            self.host_load("fw/patch.bin")
+        else:
+            self.flash_load()     
+        self.load_init()
+        if host:
+            self.host_load("fw/fm.bin")
+        else:
+            self.flash_load()
+        self.boot()
+        self.set_property(FM_AUDIO_DE_EMPHASIS, 1)
+        self.set_property(FM_RDS_CONFIG, 1)
+        print(self.get_sys_state())
+
+    def boot_dab(self, host = True):
+        self.reset()
+        self.power_up()
+        self.load_init()
+        if host:
+            self.host_load("fw/patch.bin")
+        else:
+            self.flash_load()     
+        self.load_init()
+        if host:
+            self.host_load("fw/dab.bin")
+        else:
+            self.flash_load()
+        self.boot()
+        self.set_property(DAB_TUNE_FE_CFG, 1)
+        print(self.get_sys_state())
+
     def get_part_info(self):
         resp = self.send_command(GET_PART_INFO, b'\x00', 23)
         chiprev = resp[4]
@@ -236,14 +271,26 @@ class Si468x:
         resp = self.send_command(GET_PROPERTY, args, 6)
         return {'Data': (resp[4] | (resp[5] << 8))}
 
-    def set_audio_output(self, value: int):
-        if value == 0:
+    def set_audio_output(self, output: int, master: int = 0):
+        if output == 0:
             self.set_property(PIN_CONFIG_ENABLE, (0x80 << 8) | 0x01)
-        elif value == 1:
+        elif output == 1:
             self.set_property(PIN_CONFIG_ENABLE, (0x80 << 8) | 0x00)
         else:
             print("Invalid value: use 0 for iDAC, 1 for I2S")
-
+            return
+            
+        if output == 1:
+            if master == 0:
+                self.set_property(DIGITAL_IO_OUTPUT_SELECT, (0x00 << 8) | 0x00)
+            elif master == 1:
+                self.set_property(DIGITAL_IO_OUTPUT_SELECT, (0x80 << 8) | 0x00)
+            else:
+                print("Invalid value: use 0 for Slave, 1 for Master")
+                return
+                       
+        self.fm_seek_start()
+    
     def set_volume(self, value: int):
         if 0 <= value <= 63:
             self.set_property(AUDIO_ANALOG_VOLUME, value)
