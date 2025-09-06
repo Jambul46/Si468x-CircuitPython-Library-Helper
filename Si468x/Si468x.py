@@ -27,13 +27,8 @@ Usage:
     rst = digitalio.DigitalInOut(board.GP6)
     radio = Si468x(spi, cs, rst)
 
-    radio.reset()
-    radio.power_up(xtal_freq=19200000) #Change according to XTAL your Si468x uses
-    radio.load_init()
-    radio.host_load('fw/patch.bin')
-    radio.load_init()
-    radio.host_load('fw/fm.bin')
-    radio.boot()
+    radio.boot_fm() or radio.boot_dab()
+    radio.fm_tune_freq(123456) or radio.fm_seek_start()
 
 """
 
