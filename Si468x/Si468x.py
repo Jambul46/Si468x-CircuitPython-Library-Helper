@@ -310,7 +310,8 @@ class Si468x:
 
     def fm_tune_freq(self, freq_khz: int = 87500):
         freq10 = int(freq_khz / 10)
-        args = bytes([0x0C]) + struct.pack("<H", freq10) + bytes([0x00, 0x00, 0x00])
+        freq = struct.pack("<H", freq10)
+        args = bytes([0x08] + list(freq) + [0x00, 0x00, 0x00])
         return self.send_command(FM_TUNE_FREQ, args)
 
     def fm_seek_start(self, direc=1):
