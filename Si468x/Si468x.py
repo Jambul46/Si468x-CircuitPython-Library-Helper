@@ -207,6 +207,16 @@ class Si468x:
                 
         return True
 
+    def flash_load(self, address):
+        flashaddr = struct.pack('<I', address)
+        null = 0x00
+        args = bytes([null, null, null] + list(flashaddr) + [0x00, 0x00, 0x00, 0x00])
+        resp = self.send_command(FLASH_LOAD, args, 4)
+        if (resp[0] & 0x80) !=0:
+            print("Image loaded from FLASH, start at", address)
+        else:
+            print("CTS Failed")
+
     def boot(self):
         self.send_command(BOOT, b'\x00')
         print("FW Booted")
@@ -284,7 +294,7 @@ class Si468x:
                 print("Invalid value: use 0 for Slave, 1 for Master")
                 return
                        
-        self.fm_seek_start()
+        self.fm_seek_start() #Any change of this property will take effect on next tune. BUG! fm_tune_freq doesn't seem to work for this purpose.
     
     def set_volume(self, value: int):
         if 0 <= value <= 63:
