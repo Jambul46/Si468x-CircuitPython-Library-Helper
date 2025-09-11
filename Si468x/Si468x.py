@@ -308,10 +308,11 @@ class Si468x:
         else:
             print("0 Unmute, 1 Mute Left, 2 Mute Right, 3 Mute Both")
 
-    def fm_tune_freq(self, freq_khz: int = 87500):
+    def fm_tune_freq(self, freq_khz: int = 87500, tune_mode = 2):
         freq10 = int(freq_khz / 10)
         freq = struct.pack("<H", freq10)
-        args = bytes([0x08] + list(freq) + [0x00, 0x00, 0x00])
+        mode = (tune_mode & 0x03) << 2
+        args = bytes([mode] + list(freq) + [0x00, 0x00, 0x00])
         return self.send_command(FM_TUNE_FREQ, args)
 
     def fm_seek_start(self, direc=1):
@@ -348,6 +349,27 @@ class Si468x:
             "hdlevel": resp[15],
             "filtered_hdlevel": resp[16],
         }
+
+    def fm_acf_status(self, value = 0):
+        if 0 <= value <= 1:
+            resp = self.send_command(FM_ACF_STATUS, bytes([value]), 11)
+            return {
+                "blend_int": bool((resp[4] & 0x04) >> 2),
+                "highcut_int": bool((resp[4] & 0x02) >> 1),
+                "smute_int": bool((resp[4] & 0x01)),
+                "blend_conv": (resp[5] & 0x40) >> 6,
+                "highcut_conv": (resp[5] & 0x20) >> 5,
+                "smute_conv": (resp[5] & 0x10) >> 4,
+                "blend_state": (resp[5] & 0x04) >> 2,
+                "highcut_state": (resp[5] & 0x02) >> 1,
+                "smute_state": (resp[5] & 0x01),
+                "attn": (resp[6] & 0x1F),
+                "highcut": (resp[7]),
+                "pilot": (resp[8] & 0x80) >> 7,
+                "stblend": (resp[8] & 0x7F) >> 1,
+                }
+        else:
+            print("Must be 1 (clear) or 0 (keep)")
 
     def fm_rds_status(self, debug=False, timeout=20.0, min_ps_repeats=3, min_rt_repeats=3):
         
@@ -472,6 +494,124 @@ class Si468x:
             "BLE": ble,
             "FIFO_used": rdsfifo_used,
         }
+
+    def fm_rds_blockcount(self, value = 0):
+        if 0 <= value <= 1:
+            resp = self.send_command(FM_RDS_BLOCKCOUNT, bytes([value]), 10)
+            return {
+                "expected": (resp[4] | resp[5] << 8),
+                "received": (resp[6] | resp[7] << 8),
+                "uncorrectable": (resp[8] | resp[9] << 8),
+                }
+        else:
+            print("Must be 1 (clear) or 0 (keep)")            
+
+    def decode_prog_field(self, byte):
+        return {
+            "MPS": bool(byte & 0x01),
+            "SPS1": bool(byte & 0x02),
+            "SPS2": bool(byte & 0x04),
+            "SPS3": bool(byte & 0x08),
+            "SPS4": bool(byte & 0x10),
+            "SPS5": bool(byte & 0x20),
+            "SPS6": bool(byte & 0x40),
+            "SPS7": bool(byte & 0x80),
+        }
+
+    def hd_digrad_status(self, value = 0):
+        if 0 <= value <= 1:
+            resp = self.send_command(FM_RDS_BLOCKCOUNT, bytes([value]), 23)
+            tx_gain_raw = resp[8] & 0x1F
+            
+            if tx_gain_raw & 0x10:
+                tx_gain = tx_gain_raw - 0x20
+            else:
+                tx_gain = tx_gain_raw
+            
+            return {
+                "hdlogoint": bool(resp[4] & 0x80),
+                "srcanaint": bool(resp[4] & 0x40),
+                "srcdigint": bool(resp[4] & 0x20),
+                "audacqint": bool(resp[4] & 0x08),
+                "acqint": bool(resp[4] & 0x04),
+                "cdnrhint": bool(resp[4] & 0x02),
+                "cdnrlint": bool(resp[4] & 0x01),
+                "hdlogo": (resp[5] & 0x80),
+                "srcana": (resp[5] & 0x40),
+                "srcdig": (resp[5] & 0x20),
+                "audacq": (resp[5] & 0x08),
+                "acq": (resp[5] & 0x04),
+                "cdnrh": (resp[5] & 0x02),
+                "cdnrl": (resp[5] & 0x01),
+                "bctl": (resp[6] & 0xC0),
+                "daai": (resp[6] & 0x3F),
+                "cdnr": resp[7],
+                "tx_gain": tx_gain,
+                "audio_prog_avail": self.decode_prog_field(resp[9]),
+                "audio_prog_playing": self.decode_prog_field(resp[10]),
+                "audio_ca": self.decode_prog_field(resp[11]),
+                "core_audio_err": struct.unpack("<I", resp[12:16])[0],
+                "enh_audio_err": struct.unpack("<I", resp[16:20])[0],
+                "pty": resp[20],
+                "ps_mode": resp[21],
+                "codec_mode": resp[22],
+                }
+        else:
+            print("Must be 1 (clear) or 0 (keep)")
+
+    def hd_get_event_status(self, value = 0):
+        if 0 <= value <= 1:
+            resp = self.send_command(HD_GET_EVENT_STATUS, bytes([value]), 18)
+
+    def hd_get_station_info(self, info_select: int = 1):
+        resp = self.send_command(HD_GET_STATION_INFO, bytes([info_select]), 7)
+        length = resp[4] | (resp[5] << 8)
+        data = resp[6:6+length]
+        return data
+    
+    def hd_get_psd_decode(self, program: int = 0, field: int = 0):
+        program &= 0x0F
+        field &= 0x0F
+
+        args = bytes([program, field])
+    
+        resp = self.send_command(HD_GET_PSD_DECODE, args)
+
+        datatype = resp[6] if len(resp) > 6 else 0
+        length   = resp[7] if len(resp) > 7 else 0
+        data     = resp[8:8+length] if len(resp) > 8 else []
+
+        text = ""
+        if data:
+            if datatype == 0:  # 8-bit ISO/IEC 8859-1
+                text = bytes(data).decode('latin1', errors='ignore')
+            elif datatype == 1:  # 16-bit ISO/IEC 10646-1
+                text = ''.join(
+                    chr((data[i] | (data[i+1] << 8)))
+                    for i in range(0, len(data)-1, 2)
+                )
+
+        return text
+    
+    def hd_get_alert_msg(self):
+        resp = self.send_command(HD_GET_ALERT_MSG, b'\x00', 7)
+        if len(resp) < 6:
+            return b""
+        
+        length = resp[4] | (resp[5] << 8)
+        data = resp[6:6+length] if len(resp) >= 6 + length else resp[6:]
+        
+        return data
+    
+#    def hd_play_alert_tone(self):
+    
+#    def hd_test_get_ber_info(self):
+    
+#    def hd_set_enabled_ports(self):
+    
+#    def hd_get_enabled_ports(self):
+    
+#    def hd_acf_status(self):
 
     def test_get_rssi(self):
         resp = self.send_command(TEST_GET_RSSI, b'\x00', 6)
