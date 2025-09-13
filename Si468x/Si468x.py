@@ -603,15 +603,49 @@ class Si468x:
         
         return data
     
-#    def hd_play_alert_tone(self):
+    def hd_play_alert_tone(self):
+        return self.send_command(HD_PLAY_ALERT_TONE, b'\x00', 4)
+
+
+    def hd_test_get_ber_info(self):
+        resp = self.send_command(HD_TEST_GET_BER_INFO, b'\x00', 44)
+        return {
+            "pids_block_errors": struct.unpack("<I", bytes(resp[4:8]))[0],
+            "pids_blocks_tested": struct.unpack("<I", bytes(resp[8:12]))[0],
+            "pids_bit_errors": struct.unpack("<I", bytes(resp[12:16]))[0],
+            "pids_bits_tested": struct.unpack("<I", bytes(resp[16:20]))[0],
+            "p3_bit_errors": struct.unpack("<I", bytes(resp[20:24]))[0],
+            "p3_bits_tested": struct.unpack("<I", bytes(resp[24:28]))[0],
+            "p2_bit_errors": struct.unpack("<I", bytes(resp[28:32]))[0],
+            "p2_bits_tested": struct.unpack("<I", bytes(resp[32:36]))[0],
+            "p1_bit_errors": struct.unpack("<I", bytes(resp[36:40]))[0],
+            "p1_bits_tested": struct.unpack("<I", bytes(resp[40:44]))[0],
+        }
+
+
+    def hd_set_enabled_ports(self, length, data):
+        length = len(ports)
+        if length > 64:
+            raise ValueError("Maximum 64 ports allowed")
+        args = bytes([length]) + b"".join(struct.pack("<H", p) for p in ports)        
+        return self.send_command(HD_TEST_GET_BER_INFO, args, 4)
     
-#    def hd_test_get_ber_info(self):
+    def hd_get_enabled_ports(self):
+        resp = self.send_command(HD_TEST_GET_ENABLED_PORTS, b'\x00', resp_len=4 + 2*64)
+        length = resp[4]
+        ports = [resp[6 + i*2] | (resp[7 + i*2] << 8) for i in range(length)]
+        return ports
+
     
-#    def hd_set_enabled_ports(self):
-    
-#    def hd_get_enabled_ports(self):
-    
-#    def hd_acf_status(self):
+    def hd_acf_status(self, value: int = 0):
+        if 0 <= value <= 1:
+            resp = self.send_command(HD_ACF_STATUS, bytes([value]), 8)
+        return {
+            "comf_noise_int": bool(resp[4] & 0x01),
+            "comf_noise_conv": (resp[5] & 0x10) >> 4,
+            "comf_noise_state": resp[5] & 0x01,
+            "comf_noise_level": resp[6] | (resp[7] << 8)
+            }
 
     def test_get_rssi(self):
         resp = self.send_command(TEST_GET_RSSI, b'\x00', 6)
